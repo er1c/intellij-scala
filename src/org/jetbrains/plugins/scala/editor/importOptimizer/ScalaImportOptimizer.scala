@@ -279,8 +279,8 @@ class ScalaImportOptimizer extends ImportOptimizer {
             while (i + 1 < buffer.length) {
               val l: String = buffer(i).prefixQualifier
               val r: String = buffer(i + 1).prefixQualifier
-              val lText = getImportTextCreator.getImportText(buffer(i), isUnicodeArrow, spacesInImports, sortImports)
-              val rText = getImportTextCreator.getImportText(buffer(i + 1), isUnicodeArrow, spacesInImports, sortImports)
+              val lText = getImportTextCreator.getImportText(buffer(i), isUnicodeArrow, spacesInImports, sortImports, sortOnlyText = true)
+              val rText = getImportTextCreator.getImportText(buffer(i + 1), isUnicodeArrow, spacesInImports, sortImports, sortOnlyText = true)
               if (greater(l, r, lText, rText, project) && swap(i)) changed = true
               i = i + 1
             }
@@ -482,9 +482,10 @@ object ScalaImportOptimizer {
     }
   }
 
+  // sortOnlyText == true, then return a "bad" import string that is used for sorting purposes only (leave '{' and '_' out )
   class ImportTextCreator {
     def getImportText(importInfo: ImportInfo, isUnicodeArrow: Boolean, spacesInImports: Boolean, 
-                      sortLexicografically: Boolean): String = {
+                      sortLexicografically: Boolean, sortOnlyText: Boolean = false): String = {
       import importInfo._
 
       val groupStrings = new ArrayBuffer[String]
@@ -493,12 +494,14 @@ object ScalaImportOptimizer {
       groupStrings ++= renames.map(pair => s"${pair._1} $arrow ${pair._2}")
       groupStrings ++= hidedNames.map(_ + s" $arrow _")
       val sortedGroupStrings = if (sortLexicografically) groupStrings.sorted else groupStrings
-      if (hasWildcard) sortedGroupStrings += "_"
+      if (hasWildcard && !sortOnlyText) sortedGroupStrings += "_"
       val space = if (spacesInImports) " " else ""
       val root = if (rootUsed) "_root_." else ""
       val postfix =
-        if (sortedGroupStrings.length > 1 || renames.nonEmpty || hidedNames.nonEmpty) sortedGroupStrings.mkString(s"{$space", ", ", s"$space}")
-        else sortedGroupStrings(0)
+        if (sortedGroupStrings.length > 1 || renames.nonEmpty || hidedNames.nonEmpty) {
+          if(sortOnlyText) sortedGroupStrings.mkString(",")
+          else sortedGroupStrings.mkString(s"{$space", ", ", s"$space}")
+        } else if(sortOnlyText && sortedGroupStrings.length == 0) "" else sortedGroupStrings(0)
       s"import $root${relative.getOrElse(prefixQualifier)}.$postfix"
     }
   }
